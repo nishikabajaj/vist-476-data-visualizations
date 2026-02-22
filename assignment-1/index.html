@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<body>
+<div id="container"></div>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script type="module">
+
+// Declare the chart dimensions and margins.
+const width = 640;
+const height = 600;
+const marginTop = 20;
+const marginRight = 20;
+const marginBottom = 30;
+const marginLeft = 80;
+
+const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
+const startDate = new Date("2013-01-01");
+const endDate = new Date("2026-01-01");
+
+const cellWidth = (width - marginLeft - marginRight) / 12;
+
+// Create the SVG container.
+const svg = d3.create("svg")
+    .attr("width", width)
+    .attr("height", height);
+
+// Declare the x (horizontal position) scale.
+const x = d3.scaleUtc()
+.domain([startDate, endDate])
+.range([marginLeft + cellWidth / 2, width - marginRight - cellWidth / 2]);
+
+// Declare the y (vertical position) scale.
+const y = d3.scaleBand()
+.domain(months)
+.range([marginTop, height - marginBottom])
+.padding(0.1);
+
+// Add the x-axis.
+svg.append("g")
+    .attr("transform", `translate(0, ${marginTop})`)
+    .call(d3.axisTop(x));
+
+// Add the y-axis.
+svg.append("g")
+    .attr("transform", `translate(${marginLeft},0)`)
+    .call(d3.axisLeft(y));
+
+// Append the SVG element.
+const container = document.getElementById("container");
+container.append(svg.node());
+
+d3.csv("temperature_daily.csv", d => {
+    const date = new Date(d.date);
+    return {
+        date,
+        year: date.getUTCFullYear(),
+        month: date.getUTCMonth(), // 0-11
+        monthName: months[date.getUTCMonth()],
+        maxTemp: +d.max_temperature,
+        minTemp: +d.min_temperature
+    };
+}).then(data => {
+    
+    const monthly = d3.rollups(
+        data,
+        v => ({
+            maxTemp: d3.mean(v, d => d.maxTemp),
+            minTemp: d3.mean(v, d => d.minTemp),
+            daily: [...v].sort((a, b) => d3.ascending(a.date, b.date))
+        }),
+        d => d.year,
+        d => d.month
+    ).flatMap(([year, monthData]) => monthData.map(([month, values]) => ({
+        year,
+        month,
+        monthName: months[month],
+        maxTemp: values.maxTemp,
+        minTemp: values.minTemp,
+        daily: values.daily
+    }))
+    )
+
+    console.log(monthly);
+
+});
+
+
+</script>
+</body>
+</html>
