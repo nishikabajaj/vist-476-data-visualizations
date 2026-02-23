@@ -93,6 +93,20 @@ d3.csv("temperature_daily.csv", d => {
 
     // Creating grid cells
     let currentMetric = "maxTemp"; // Default metric to display
+
+    svg.append("text")
+        .attr("class", "metric-label")
+        .attr("x", width - marginRight - legendWidth)
+        .attr("y", height - 10)
+        .attr("text-anchor", "end")
+        .style("font-family", "sans-serif")
+        .style("font-size", "12px")
+        .text(`Currently Showing: Max Temp`);
+
+    function updateMetricDisplay() {
+        svg.select("text.metric-label")
+            .text(`Currently Showing: ${currentMetric === "maxTemp" ? "Max Temp" : "Min Temp"}`);
+    }
     
     const color = d3.scaleSequential(d3.interpolateRdYlBu)
     
@@ -117,7 +131,10 @@ d3.csv("temperature_daily.csv", d => {
     // Add interactivity to switch between maxTemp and minTemp
     svg.on("click", () => {
         currentMetric = currentMetric === "maxTemp" ? "minTemp" : "maxTemp";
+
         updateColorDomain();
+        updateMetricDisplay();
+
         cells.select("rect")
             .transition()
             .duration(500)
@@ -157,8 +174,6 @@ d3.csv("temperature_daily.csv", d => {
                 d3.max(d.daily, dd => dd.maxTemp)
             ])
             .range([y.bandwidth() - padding, padding]);
-
-        
 
         const lineMax = d3.line()
             .x((dd, i) => xMini(i + 1))
