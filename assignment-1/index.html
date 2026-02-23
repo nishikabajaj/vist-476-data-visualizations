@@ -12,37 +12,45 @@ const marginTop = 20;
 const marginRight = 70;
 const marginBottom = 30;
 const marginLeft = 80;
+
+// Legend dimensions
 const legendWidth = 20;
 const legendHeight = 150;
 
+// Month names for labeling.
 const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
 ];
 
-// Load the data and process it.
-d3.csv("temperature_daily.csv", d => {
-    const date = new Date(d.date);
-    return {
-        date,
-        year: date.getUTCFullYear(),
-        month: date.getUTCMonth(), // 0-11
-        monthName: months[date.getUTCMonth()],
-        maxTemp: +d.max_temperature,
-        minTemp: +d.min_temperature
-    };
-}).then(data => {
+// Create the SVG container.
+    const svg = d3.create("svg")
+    .attr("width", width)
+    .attr("height", height);
 
-    const monthly = d3.rollups(
+// DATA PROCESSING
+d3.csv("temperature_daily.csv", d => {
+    const date = new Date(d.date); // Retrieve the date from the CSV and convert it to a Date object.
+    return { // Return an object with the relevant data for each row in the CSV.
+        date,
+        year: date.getUTCFullYear(), // Get the year from the date.
+        month: date.getUTCMonth(), // 0-11
+        monthName: months[date.getUTCMonth()], // Get the month name from the month index.
+        maxTemp: +d.max_temperature, // Get the maximum temperature and convert it to a number.
+        minTemp: +d.min_temperature // Get the minimum temperature and convert it to a number.
+    };
+}).then(data => { // Once the data is loaded and processed, this function will be executed with the processed data as an argument.
+
+    const monthly = d3.rollups( // monthly is an array of arrays, where each inner array contains a year, a month, and an object with the average max and min temperatures for that month, as well as the daily data for that month.
         data,
-        v => ({
+        v => ({ // v is the array of daily data for a specific month and year. We calculate the average max and min temperatures for that month, and also keep the daily data sorted by date.
             maxTemp: d3.mean(v, d => d.maxTemp),
             minTemp: d3.mean(v, d => d.minTemp), 
             daily: [...v].sort((a, b) => d3.ascending(a.date, b.date))
         }),
         d => d.year,
         d => d.month
-    ).flatMap(([year, monthData]) => monthData.map(([month, values]) => ({
+    ).flatMap(([year, monthData]) => monthData.map(([month, values]) => ({ // We then flatten the nested structure into a single array of objects, where each object represents a month and contains the year, month index, month name, average max and min temperatures, and the daily data for that month.
         year,
         month,
         monthName: months[month],
@@ -52,25 +60,20 @@ d3.csv("temperature_daily.csv", d => {
     }))
     )
 
-    console.log(monthly);
-
+    // console.log(monthly);
+    
+    // AXIS AND SCALES
+    // Get the unique years from the data and sort them in ascending order. We then take the last 10 years to display in the heatmap.
     const years = Array.from(new Set(monthly.map(d => d.year))).sort(d3.ascending);
-
-    // Create the SVG container.
-    const svg = d3.create("svg")
-        .attr("width", width)
-        .attr("height", height);
+    const visibleYears = years.slice(-10); // Get the last 10 years
+    const filteredMonthly = monthly.filter(d => visibleYears.includes(d.year));
     
     // Declare the x (horizontal position) scale.
-    const visibleYears = years.slice(-10); // Get the last 10 years
-
     const x = d3.scaleBand()
     .domain(visibleYears)
     .range([marginLeft, width - marginRight - legendWidth])
     .padding(0.1);
-
-    const filteredMonthly = monthly.filter(d => visibleYears.includes(d.year));
-
+    
     // Declare the y (vertical position) scale.
     const y = d3.scaleBand()
     .domain(months)
@@ -91,9 +94,11 @@ d3.csv("temperature_daily.csv", d => {
     const container = document.getElementById("container");
     container.append(svg.node());
 
-    // Creating grid cells
+    // GRID CELLS AND INTERACTIVITY
     let currentMetric = "maxTemp"; // Default metric to display
 
+    // METRIC LABEL
+    // This labels the current metric being displayed - maxTemp or minTemp.
     svg.append("text")
         .attr("class", "metric-label")
         .attr("x", width - marginRight - legendWidth)
@@ -103,32 +108,34 @@ d3.csv("temperature_daily.csv", d => {
         .style("font-size", "12px")
         .text(`Currently Showing: Max Temp`);
 
-    function updateMetricDisplay() {
+    function updateMetricDisplay() { // This function updates the text label to reflect the currently displayed metric.
         svg.select("text.metric-label")
             .text(`Currently Showing: ${currentMetric === "maxTemp" ? "Max Temp" : "Min Temp"}`);
     }
     
+    // COLOR SCALE
     const color = d3.scaleSequential(d3.interpolateRdYlBu)
     
-    function updateColorDomain() {
+    function updateColorDomain() { // This function updates the color scale domain based on the currently displayed metric. We reverse the extent to have higher temperatures in red and lower temperatures in blue.
         const extent = d3.extent(filteredMonthly, d => d[currentMetric]);
         color.domain(extent.reverse()); // Reverse to have higher temperatures in red
     }
     
     updateColorDomain();
     
-    const cells = svg.selectAll("g.cell")
+    // CELL CONSTRUCTION
+    const cells = svg.selectAll("g.cell") // Create a group element for each cell in the heatmap, and position it according to the x and y scales based on the year and month.
         .data(filteredMonthly)
         .join("g")
         .attr("class", "cell")
         .attr("transform", d => `translate(${x(d.year)}, ${y(d.monthName)})`);
 
-    cells.append("rect")
+    cells.append("rect") // Append a rectangle to each cell group, and set its width, height, and fill color based on the current metric's value for that month.
         .attr("width", x.bandwidth())
         .attr("height", y.bandwidth())
         .attr("fill", d => color(d[currentMetric]));
 
-    // Add interactivity to switch between maxTemp and minTemp
+    // On-click interactivity to switch between maxTemp and minTemp
     svg.on("click", () => {
         currentMetric = currentMetric === "maxTemp" ? "minTemp" : "maxTemp";
 
@@ -141,9 +148,9 @@ d3.csv("temperature_daily.csv", d => {
             .attr("fill", d => color(d[currentMetric]));
     });
 
-    // Add tooltip interactivity
-    const tooltip = d3.select("#tooltip");
-    cells.on("mouseover", function(event, d) {
+    // TOOLTIP INTERACTIVITY
+    const tooltip = d3.select("#tooltip"); 
+    cells.on("mouseover", function(event, d) { // On mouseover, we display the tooltip with the month, year, and max/min temperatures for that month. We position the tooltip near the mouse cursor.
         tooltip.style("display", "block")
             .html(`
                 <strong>${d.monthName} ${d.year}</strong><br>
@@ -158,14 +165,14 @@ d3.csv("temperature_daily.csv", d => {
         tooltip.style("display", "none");
     });
 
-    // Add lines for daily temperatures
-    cells.each(function(d) {
+    // DAILY TEMPERATURE LINES
+    cells.each(function(d) { // For each cell, we create mini line charts for the daily max and min temperatures within that month. We set up mini x and y scales for the daily data, and use D3's line generator to create paths for the max and min temperature lines.
         const cell = d3.select(this);
         
         const padding = 12;
 
         const xMini = d3.scaleLinear()
-            .domain([1, d.daily.length])
+            .domain([1, d.daily.length]) // The x-axis for the mini line chart will represent the days of the month, so we set the domain from 1 to the number of daily data points (which corresponds to the number of days in that month).
             .range([0, x.bandwidth()]);
 
         const yMini = d3.scaleLinear()
@@ -176,21 +183,21 @@ d3.csv("temperature_daily.csv", d => {
             .range([y.bandwidth() - padding, padding]);
 
         const lineMax = d3.line()
-            .x((dd, i) => xMini(i + 1))
+            .x((dd, i) => xMini(i + 1)) // The x-coordinate for each point on the line is determined by the index of the daily data point (i) plus 1 (to start from 1 instead of 0), mapped through the xMini scale.
             .y(dd => yMini(dd[currentMetric]));
         
         const lineMin = d3.line()
             .x((dd, i) => xMini(i + 1))
             .y(dd => yMini(dd.minTemp));
         
-        cell.append("path")
+        cell.append("path") // Append a path for the max temperature line, using the line generator to create the "d" attribute based on the daily data. We style it with a green stroke.
         .datum(d.daily)
         .attr("d", lineMax)
         .attr("fill", "none")
         .attr("stroke", "green")
         .attr("stroke-width", 1);
 
-        cell.append("path")
+        cell.append("path") // Append a path for the min temperature line, using the line generator to create the "d" attribute based on the daily data. We style it with a light blue stroke.
         .datum(d.daily)
         .attr("d", lineMin)
         .attr("fill", "none")
@@ -198,16 +205,15 @@ d3.csv("temperature_daily.csv", d => {
         .attr("stroke-width", 1);
     });
 
-    // Legend
-
-    const legendScale = d3.scaleLinear()
+    // LEGEND CONSTRUCTION
+    const legendScale = d3.scaleLinear() // The legend scale maps the temperature values to pixel values for the legend axis. We set the domain from 40 to 0 to match the color scale, and the range from the legend height to 0 to have higher temperatures at the top of the legend.
         .domain([40, 0])
         .range([legendHeight, 0]);
     
-    const legend = svg.append("g")
+    const legend = svg.append("g") // We append a group element for the legend, and position it to the right of the heatmap using a transform.
         .attr("transform", `translate(${width - marginRight}, ${marginTop})`);
 
-    const legendGradient = svg.append("defs")
+    const legendGradient = svg.append("defs") // We create a linear gradient for the legend, which will visually represent the color scale. The gradient goes from bottom to top, with the colors corresponding to the temperature values.
         .append("linearGradient")
         .attr("id", "legend-gradient")
         .attr("x1", "0%")
@@ -215,19 +221,18 @@ d3.csv("temperature_daily.csv", d => {
         .attr("x2", "0%")
         .attr("y2", "0%");
     
-    legendGradient.selectAll("stop")
+    legendGradient.selectAll("stop") // We create a stop for each percentage point along the gradient, and set the stop color based on the color scale for the corresponding temperature value.
         .data(d3.range(0, 1.01, 0.01))
         .join("stop")
         .attr("offset", d => `${d * 100}%`)
         .attr("stop-color", d => color(color.domain()[0] + d * (color.domain()[1] - color.domain()[0])));
 
-    legend.append("rect")
+    legend.append("rect") // We append a rectangle to the legend group, and fill it with the linear gradient we just created. This rectangle visually represents the color scale for the temperatures.
         .attr("width", legendWidth)
         .attr("height", legendHeight)
         .attr("fill", "url(#legend-gradient)");
     
-    // Add axis for legend
-    legend.append("g")
+    legend.append("g") // We append a group for the legend axis, and position it to the right of the gradient rectangle. We then call the axisRight function to create a vertical axis with ticks corresponding to the temperature values, formatted as degrees Celsius.
         .attr("transform", `translate(${legendWidth}, 0)`)
         .call(d3.axisRight(legendScale)
             .ticks(5)
