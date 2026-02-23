@@ -6,12 +6,14 @@
 <script type="module">
 
 // Declare the chart dimensions and margins.
-const width = 640;
+const width = 760;
 const height = 600;
 const marginTop = 20;
-const marginRight = 20;
+const marginRight = 70;
 const marginBottom = 30;
 const marginLeft = 80;
+const legendWidth = 20;
+const legendHeight = 150;
 
 const months = [
     "January", "February", "March", "April", "May", "June",
@@ -64,7 +66,7 @@ d3.csv("temperature_daily.csv", d => {
 
     const x = d3.scaleBand()
     .domain(visibleYears)
-    .range([marginLeft, width - marginRight])
+    .range([marginLeft, width - marginRight - legendWidth])
     .padding(0.1);
 
     const filteredMonthly = monthly.filter(d => visibleYears.includes(d.year));
@@ -92,10 +94,11 @@ d3.csv("temperature_daily.csv", d => {
     // Creating grid cells
     let currentMetric = "maxTemp"; // Default metric to display
     
-    const color = d3.scaleSequential(d3.interpolateRdYlBu);
+    const color = d3.scaleSequential(d3.interpolateRdYlBu)
     
     function updateColorDomain() {
-        color.domain(d3.extent(monthly, d => d[currentMetric]));
+        const extent = d3.extent(filteredMonthly, d => d[currentMetric]);
+        color.domain(extent.reverse()); // Reverse to have higher temperatures in red
     }
     
     updateColorDomain();
@@ -111,11 +114,105 @@ d3.csv("temperature_daily.csv", d => {
         .attr("height", y.bandwidth())
         .attr("fill", d => color(d[currentMetric]));
 
+    // Add interactivity to switch between maxTemp and minTemp
+    svg.on("click", () => {
+        currentMetric = currentMetric === "maxTemp" ? "minTemp" : "maxTemp";
+        updateColorDomain();
+        cells.select("rect")
+            .transition()
+            .duration(500)
+            .attr("fill", d => color(d[currentMetric]));
+    });
+
+    // Add tooltip interactivity
+    const tooltip = d3.select("#tooltip");
+    cells.on("mouseover", function(event, d) {
+        tooltip.style("display", "block")
+            .html(`
+                <strong>${d.monthName} ${d.year}</strong><br>
+                Max Temp: ${d.maxTemp.toFixed(2)}°C<br>
+                Min Temp: ${d.minTemp.toFixed(2)}°C
+            `);
+    }).on("mousemove", function(event) {
+        tooltip
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY + 10) + "px");
+    }).on("mouseout", function() {
+        tooltip.style("display", "none");
+    });
+
+    // Add lines for daily temperatures
+    cells.append("path")
+        .attr("fill", "none")
+        .attr("stroke", "black")
+        .attr("stroke-width", 1)
+        .attr("d", d => {
+            const xMini = d3.scaleLinear()
+                .domain([1, d.daily.length])
+                .range([0, x.bandwidth()]);
+            const yMini = d3.scaleLinear()
+                .domain([
+                    d3.min(d.daily, dd => dd.minTemp),
+                    d3.max(d.daily, dd => dd.maxTemp)
+                ])
+                .range([y.bandwidth(), 0]);
+            const line = d3.line()
+                .x((dd, i) => xMini(i + 1))
+                .y(dd => yMini(dd[currentMetric]));
+            return line(d.daily);
+    });
+
+    // Legend
+
+    const legendScale = d3.scaleLinear()
+        .domain([40, 0])
+        .range([legendHeight, 0]);
+    
+    const legend = svg.append("g")
+        .attr("transform", `translate(${width - marginRight}, ${marginTop})`);
+
+    const legendGradient = svg.append("defs")
+        .append("linearGradient")
+        .attr("id", "legend-gradient")
+        .attr("x1", "0%")
+        .attr("y1", "100%")
+        .attr("x2", "0%")
+        .attr("y2", "0%");
+    
+    legendGradient.selectAll("stop")
+        .data(d3.range(0, 1.01, 0.01))
+        .join("stop")
+        .attr("offset", d => `${d * 100}%`)
+        .attr("stop-color", d => color(color.domain()[0] + d * (color.domain()[1] - color.domain()[0])));
+
+    legend.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .attr("fill", "url(#legend-gradient)");
+    
+    // Add axis for legend
+    legend.append("g")
+        .attr("transform", `translate(${legendWidth}, 0)`)
+        .call(d3.axisRight(legendScale)
+            .ticks(5)
+            .tickValues([0, 40])
+            .tickFormat(d => `${d.toFixed(1)}°C`));
 });
 
 
 
 
 </script>
+
+<div id="tooltip" style="
+font-family: sans-serif;
+font-size: 12px;
+position: absolute;
+background: white;
+border: 1px solid rgb(214, 214, 214);
+padding: 5px;
+display: none;">
+</div>
+
 </body>
 </html>
