@@ -142,24 +142,45 @@ d3.csv("temperature_daily.csv", d => {
     });
 
     // Add lines for daily temperatures
-    cells.append("path")
+    cells.each(function(d) {
+        const cell = d3.select(this);
+        
+        const padding = 12;
+
+        const xMini = d3.scaleLinear()
+            .domain([1, d.daily.length])
+            .range([0, x.bandwidth()]);
+
+        const yMini = d3.scaleLinear()
+            .domain([
+                d3.min(d.daily, dd => dd.minTemp),
+                d3.max(d.daily, dd => dd.maxTemp)
+            ])
+            .range([y.bandwidth() - padding, padding]);
+
+        
+
+        const lineMax = d3.line()
+            .x((dd, i) => xMini(i + 1))
+            .y(dd => yMini(dd[currentMetric]));
+        
+        const lineMin = d3.line()
+            .x((dd, i) => xMini(i + 1))
+            .y(dd => yMini(dd.minTemp));
+        
+        cell.append("path")
+        .datum(d.daily)
+        .attr("d", lineMax)
         .attr("fill", "none")
-        .attr("stroke", "black")
-        .attr("stroke-width", 1)
-        .attr("d", d => {
-            const xMini = d3.scaleLinear()
-                .domain([1, d.daily.length])
-                .range([0, x.bandwidth()]);
-            const yMini = d3.scaleLinear()
-                .domain([
-                    d3.min(d.daily, dd => dd.minTemp),
-                    d3.max(d.daily, dd => dd.maxTemp)
-                ])
-                .range([y.bandwidth(), 0]);
-            const line = d3.line()
-                .x((dd, i) => xMini(i + 1))
-                .y(dd => yMini(dd[currentMetric]));
-            return line(d.daily);
+        .attr("stroke", "green")
+        .attr("stroke-width", 1);
+
+        cell.append("path")
+        .datum(d.daily)
+        .attr("d", lineMin)
+        .attr("fill", "none")
+        .attr("stroke", "lightblue")
+        .attr("stroke-width", 1);
     });
 
     // Legend
@@ -198,8 +219,6 @@ d3.csv("temperature_daily.csv", d => {
             .tickValues([0, 40])
             .tickFormat(d => `${d.toFixed(1)}°C`));
 });
-
-
 
 
 </script>
